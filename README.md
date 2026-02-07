@@ -11,26 +11,21 @@ Dự án C++ blink LED tích hợp trên bo ESP32-C3 Supermini (OLED board).
 
 - [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/get-started/) đã cài đặt
 
-## Cách build và flash
+## Chạy nhanh (1 lệnh duy nhất)
 
 ```bash
-# Kích hoạt môi trường ESP-IDF
-source $IDF_PATH/export.sh
+./build_flash_monitor.sh
+```
 
-# Vào thư mục dự án
-cd /Users/duongthanhtoan/Desktop/codespace/esp32c3
+Build → nạp code → mở Serial Monitor. Thoát monitor: **Ctrl+]**
 
-# Chọn target ESP32-C3 (chỉ cần lần đầu)
-idf.py set-target esp32c3
+---
 
-# Build
-idf.py build
+## Cách build và flash (từng bước)
 
-# Flash (thay /dev/cu.usbmodem* bằng port COM của bạn)
-idf.py -p /dev/cu.usbmodem* flash
-
-# Xem serial monitor (trạng thái LED ON/OFF)
-./run_monitor.sh
+```bash
+./build_flash.sh          # Build + Flash
+./run_monitor.sh          # Mở Serial Monitor
 ```
 
 ## Cấu trúc dự án
