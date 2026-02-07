@@ -1,0 +1,2 @@
+source /Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader/gdbinit/symbols
+source /Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader/gdbinit/connect

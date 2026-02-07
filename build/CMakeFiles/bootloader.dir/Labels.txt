@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/CMakeFiles/bootloader
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/CMakeFiles/bootloader.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/CMakeFiles/bootloader-complete.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+/Users/duongthanhtoan/Desktop/codespace/esp32c3/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
