@@ -29,8 +29,8 @@ idf.py build
 # Flash (thay /dev/cu.usbmodem* bằng port COM của bạn)
 idf.py -p /dev/cu.usbmodem* flash
 
-# Xem log serial
-idf.py -p /dev/cu.usbmodem* monitor
+# Xem serial monitor (trạng thái LED ON/OFF)
+./run_monitor.sh
 ```
 
 ## Cấu trúc dự án
