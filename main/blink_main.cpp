@@ -1,14 +1,15 @@
 /**
  * ESP32-C3 Supermini - WiFi + Nhiet do cac thanh pho
  * - Ket noi WiFi
- * - Lay nhiet do HCM qua Open-Meteo API (tu dong 30s)
- * - Nhap ten thanh pho + Enter: tra cuu nhiet do (text hien thi khi nhap)
+ * - Web UI: mo http://<IP-cua-ESP32>/ tren trinh duyet (cung WiFi)
+ * - Serial: nhap ten thanh pho + Enter
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include "linenoise/linenoise.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -19,6 +20,7 @@
 #include "esp_netif.h"
 #include "nvs_flash.h"
 #include "esp_http_client.h"
+#include "esp_http_server.h"
 #include "esp_crt_bundle.h"
 #include "cJSON.h"
 #include "wifi_config.h"
@@ -159,6 +161,119 @@ static float fetch_temp(const char *lat, const char *lon)
 
 static float fetch_hcm_temperature(void) { return fetch_temp(HCM_LAT, HCM_LON); }
 
+// Trang HTML giao dien web
+static const char* HTML_PAGE =
+"<!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content=\"width=device-width,initial-scale=1\">"
+"<title>Nhiet do</title>"
+"<style>"
+"*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:linear-gradient(135deg,#1a1a2e,#16213e);min-height:100vh;display:flex;align-items:center;justify-content:center;color:#eee}"
+".card{background:rgba(255,255,255,0.08);border-radius:16px;padding:32px;box-shadow:0 8px 32px rgba(0,0,0,0.3);text-align:center;max-width:380px}"
+"h1{margin:0 0 24px;font-size:1.5rem;color:#4fc3f7}"
+"select{width:100%;padding:12px 16px;font-size:1rem;border-radius:8px;border:1px solid #4fc3f7;background:#0d1117;color:#eee;margin-bottom:16px}"
+"button{width:100%;padding:14px;font-size:1rem;border:none;border-radius:8px;background:#4fc3f7;color:#0d1117;font-weight:600;cursor:pointer}"
+"button:hover{background:#29b6f6}"
+"button:disabled{opacity:0.6;cursor:not-allowed}"
+"#result{margin-top:24px;min-height:48px;font-size:1.8rem;font-weight:700}"
+".temp{color:#4fc3f7}"
+".err{color:#ef5350}"
+".ip{font-size:0.75rem;color:#888;margin-top:16px}"
+"</style></head><body>"
+"<div class=card>"
+"<h1>Nhiet do thanh pho</h1>"
+"<select id=city>"
+"<option value=0>HCM City</option><option value=1>Tokyo</option><option value=2>London</option>"
+"<option value=3>New York</option><option value=4>Paris</option><option value=5>Sydney</option>"
+"<option value=6>Dubai</option><option value=7>Singapore</option>"
+"</select>"
+"<button id=btn onclick=fetchTemp()>Tra cuu</button>"
+"<div id=result></div>"
+"<div class=ip>Mo http://&lt;IP&gt; tren cung WiFi</div>"
+"</div>"
+"<script>"
+"async function fetchTemp(){"
+"var b=document.getElementById('btn');b.disabled=true;document.getElementById('result').innerHTML='...';"
+"try{"
+"var r=await fetch('/temp?city='+document.getElementById('city').value);"
+"var j=await r.json();"
+"var el=document.getElementById('result');"
+"if(j.ok)el.innerHTML='<span class=temp>'+j.city+': '+j.temp+' &deg;C</span>';"
+"else el.innerHTML='<span class=err>'+j.err+'</span>';"
+"}catch(e){document.getElementById('result').innerHTML='<span class=err>Loi ket noi</span>';}"
+"b.disabled=false;"
+"}"
+"</script></body></html>";
+
+static esp_err_t html_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    return httpd_resp_send(req, HTML_PAGE, strlen(HTML_PAGE));
+}
+
+static esp_err_t temp_api_handler(httpd_req_t *req)
+{
+    char buf[32];
+    size_t len = httpd_req_get_url_query_len(req);
+    if (len >= sizeof(buf)) len = sizeof(buf) - 1;
+    if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) != ESP_OK) {
+        cJSON *err = cJSON_CreateObject();
+        cJSON_AddBoolToObject(err, "ok", false);
+        cJSON_AddStringToObject(err, "err", "Thieu tham so");
+        char *out = cJSON_PrintUnformatted(err);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, out ?: "{}");
+        free(out);
+        cJSON_Delete(err);
+        return ESP_OK;
+    }
+
+    char city_val[8] = {0};
+    if (httpd_query_key_value(buf, "city", city_val, sizeof(city_val)) != ESP_OK) {
+        cJSON *err = cJSON_CreateObject();
+        cJSON_AddBoolToObject(err, "ok", false);
+        cJSON_AddStringToObject(err, "err", "Thieu city");
+        char *out = cJSON_PrintUnformatted(err);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, out ?: "{}");
+        free(out);
+        cJSON_Delete(err);
+        return ESP_OK;
+    }
+
+    int idx = atoi(city_val);
+    if (idx < 0 || idx >= (int)NUM_CITIES) idx = 0;
+
+    float temp = fetch_temp(CITIES[idx].lat, CITIES[idx].lon);
+    cJSON *j = cJSON_CreateObject();
+    cJSON_AddBoolToObject(j, "ok", temp > -900.0f);
+    cJSON_AddStringToObject(j, "city", CITIES[idx].name);
+    if (temp > -900.0f) {
+        cJSON_AddNumberToObject(j, "temp", temp);
+    } else {
+        cJSON_AddStringToObject(j, "err", "Loi lay du lieu");
+    }
+    char *out = cJSON_PrintUnformatted(j);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, out ?: "{}");
+    free(out);
+    cJSON_Delete(j);
+    return ESP_OK;
+}
+
+static void start_web_server(void)
+{
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 4;
+
+    if (httpd_start(&server, &config) == ESP_OK) {
+        httpd_uri_t html = { .uri = "/", .method = HTTP_GET, .handler = html_handler };
+        httpd_uri_t temp = { .uri = "/temp", .method = HTTP_GET, .handler = temp_api_handler };
+        httpd_register_uri_handler(server, &html);
+        httpd_register_uri_handler(server, &temp);
+        printf("[Web] Server: http://<IP-cua-ESP32>/\n");
+    }
+}
+
 static void wifi_scan_first(void)
 {
     wifi_scan_config_t scan_ref = {0};
@@ -195,15 +310,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         printf("[WiFi] Disconnect #%d - reason %d (%s)\n", wifi_retry, evt->reason, wifi_reason_str(evt->reason));
 
         if (wifi_retry > 10) {
-            printf("[WiFi] FAILED - Kiem tra SSID/mat khau trong wifi_config.h\n");
+            printf("[WiFi] FAILED - Kiem tra SSID/mat khau. Restart sau 30s...\n");
             xEventGroupSetBits(wifi_event_group, WIFI_FAILED);
         } else {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(2000));  /* 2s giua cac lan thu - tranh flood router */
             esp_wifi_connect();
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *evt = (ip_event_got_ip_t *)event_data;
+        wifi_retry = 0;  /* Reset khi connect thanh cong - tranh tich luy retry */
         printf("[WiFi] OK! IP: " IPSTR "\n", IP2STR(&evt->ip_info.ip));
+        printf("[Web] Mo http://" IPSTR "/ tren trinh duyet\n", IP2STR(&evt->ip_info.ip));
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED);
     }
 }
@@ -241,12 +358,14 @@ static void wifi_init(void)
 
     if (bits & WIFI_FAILED) {
         write_wifi_log("Qua nhieu lan that bai", wifi_retry);
-        printf("[WiFi] Qua nhieu lan that bai. Restart...\n");
+        printf("[WiFi] Qua nhieu lan that bai. Restart sau 10s...\n");
+        vTaskDelay(pdMS_TO_TICKS(10000));  /* Tranh restart loop lien tuc */
         esp_restart();
     }
     if (!(bits & WIFI_CONNECTED)) {
         write_wifi_log("Timeout 20s", wifi_retry);
-        printf("[WiFi] Timeout 20s. Kiem tra router/tin hieu. Restart...\n");
+        printf("[WiFi] Timeout 20s. Kiem tra router/tin hieu. Restart sau 10s...\n");
+        vTaskDelay(pdMS_TO_TICKS(10000));  /* Tranh restart loop lien tuc */
         esp_restart();
     }
 }
@@ -305,65 +424,37 @@ static void trim(char *s)
 
 static void serial_task(void *arg)
 {
-    char buf[64];
-    int len = 0;
-    buf[0] = '\0';
+    /* Tat buffer de text nhap hien thi ngay (linenoise cung echo) */
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    linenoiseSetDumbMode(1);  /* Dumb mode = echo tung ky tu */
 
-    printf("\nNhap ten thanh pho (<Enter> de tra cuu): ");
-    printf("Danh sach: HCM City, Tokyo, London, New York, Paris, Sydney, Dubai, Singapore\n\n");
+    printf("\nDanh sach: HCM City, Tokyo, London, New York, Paris, Sydney, Dubai, Singapore\n\n");
 
     while (1) {
-        int c = getchar();
-        if (c == EOF || c < 0) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+        char *line = linenoise("Nhap ten thanh pho: ");
+        if (!line) {
+            vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
-        if (c == '\n' || c == '\r') {
-            putchar('\n');
-            if (len > 0) {
-                buf[len] = '\0';
-                trim(buf);
-
-                if (len > 0) {
-                    const city_t *city = find_city(buf);
-                    if (city) {
-                        printf("  %s: ", city->name);
-                        fflush(stdout);
-                        float temp = fetch_temp(city->lat, city->lon);
-                        if (temp > -900.0f) {
-                            printf("%.1f C\n", temp);
-                        } else {
-                            printf("Loi lay du lieu\n");
-                        }
-                    } else {
-                        printf("  Khong tim thay '%s'. Danh sach: HCM City, Tokyo, London, New York, Paris, Sydney, Dubai, Singapore\n", buf);
-                    }
-                }
-            }
-            len = 0;
-            buf[0] = '\0';
-            printf("\nNhap ten thanh pho: ");
-            fflush(stdout);
-            continue;
-        }
-
-        if (c == 8 || c == 127) {  // Backspace
-            if (len > 0) {
-                len--;
-                buf[len] = '\0';
-                printf("\b \b");  // Xoa ky tu tren man hinh
+        trim(line);
+        if (strlen(line) > 0) {
+            const city_t *city = find_city(line);
+            if (city) {
+                printf("  %s: ", city->name);
                 fflush(stdout);
+                float temp = fetch_temp(city->lat, city->lon);
+                if (temp > -900.0f) {
+                    printf("%.1f C\n", temp);
+                } else {
+                    printf("Loi lay du lieu\n");
+                }
+            } else {
+                printf("  Khong tim thay '%s'.\n", line);
             }
-            continue;
         }
-
-        if (len < (int)sizeof(buf) - 1 && (isalnum((unsigned char)c) || c == ' ' || c == '-')) {
-            buf[len++] = (char)c;
-            buf[len] = '\0';
-            putchar(c);  // Hien thi ky tu dang nhap
-            fflush(stdout);
-        }
+        linenoiseFree(line);
     }
 }
 
@@ -399,4 +490,5 @@ extern "C" void app_main(void)
     xTaskCreate(blink_task, "blink", 2048, NULL, 1, NULL);
     xTaskCreate(weather_task, "weather", 4096, NULL, 2, NULL);
     xTaskCreate(serial_task, "serial", 8192, NULL, 1, NULL);
+    start_web_server();
 }

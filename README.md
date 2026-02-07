@@ -1,8 +1,8 @@
-# ESP32-C3 Supermini - WiFi + Nhiet do HCM City
+# ESP32-C3 Supermini - WiFi + Nhiet do cac thanh pho
 
 - Ket noi WiFi
-- Lay nhiet do HCM qua Open-Meteo API
-- Hien thi qua Serial (cap nhat moi 30s)
+- **Web UI:** Mo `http://<IP>` tren trinh duyet (cung WiFi) - dropdown chon thanh pho, nut tra cuu
+- Serial: nhap ten thanh pho + Enter
 
 ## Phần cứng
 
@@ -21,7 +21,7 @@
 
 Build → nạp code → mở Serial Monitor. Thoát monitor: **Ctrl+]**
 
-Output: Nhiet do HCM City hien thi moi 30 giay.
+Khi ESP32 ket noi WiFi, xem IP tren Serial. Mo `http://<IP>` tren trinh duyet de dung giao dien web.
 
 ---
 
@@ -31,6 +31,16 @@ Output: Nhiet do HCM City hien thi moi 30 giay.
 ./build_flash.sh          # Build + Flash
 ./run_monitor.sh          # Mở Serial Monitor
 ```
+
+## Giao dien Web
+
+Sau khi ESP32 ket noi WiFi, Serial se hien IP (vd: `192.168.1.10`). Mo trinh duyet:
+
+```
+http://192.168.1.10/
+```
+
+Giao dien HTML: chon thanh pho tu dropdown, nhan "Tra cuu" de xem nhiet do.
 
 ## WiFi (.env)
 
