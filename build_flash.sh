@@ -4,16 +4,16 @@
 
 set -e
 
-# Kiểm tra ESP-IDF
+# Tự kích hoạt ESP-IDF nếu chưa có
 if [ -z "$IDF_PATH" ]; then
-    echo "❌ ESP-IDF chưa được kích hoạt."
-    echo ""
-    echo "Chạy lệnh sau trước (chọn 1 trong các đường dẫn phù hợp):"
-    echo "  source \$HOME/esp/esp-idf/export.sh"
-    echo "  # hoặc nếu cài qua VSCode extension:"
-    echo "  source \$HOME/.espressif/esp-idf/export.sh"
-    echo ""
-    exit 1
+    if [ -f "$HOME/.espressif/v5.5.2/esp-idf/export.sh" ]; then
+        export PATH="/opt/homebrew/opt/python@3.12/libexec/bin:$PATH"
+        source "$HOME/.espressif/v5.5.2/esp-idf/export.sh"
+    else
+        echo "❌ ESP-IDF chưa được cài đặt."
+        echo "   Chạy: brew install eim && eim install"
+        exit 1
+    fi
 fi
 
 cd "$(dirname "$0")"
@@ -28,5 +28,5 @@ idf.py build
 echo "📤 Flashing to $PORT..."
 idf.py -p "$PORT" flash
 
-echo "✅ Hoàn tất! LED sẽ nhấp nháy."
+echo "✅ Hoàn tất!"
 echo "   Chạy 'idf.py -p $PORT monitor' để xem log serial."

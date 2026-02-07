@@ -1,11 +1,11 @@
-# ESP32-C3 Supermini - Blink Built-in LED
+# ESP32-C3 Supermini - Crypto Price Display
 
-Dự án C++ blink LED tích hợp trên bo ESP32-C3 Supermini (OLED board).
+Dự án C++ hiển thị giá crypto qua serial (mỗi 2 giây 1 coin mới).
 
 ## Phần cứng
 
 - **Bo mạch:** ESP32-C3 Supermini với OLED 0.42 inch
-- **LED tích hợp:** GPIO8 (LED đỏ giữa nút RST và BOOT)
+- **Chức năng:** Hiển thị giá crypto (BTC, ETH, SOL, ADA, XRP, DOGE, AVAX, DOT) qua serial mỗi 2 giây
 
 ## Yêu cầu
 
@@ -29,18 +29,34 @@ idf.py build
 # Flash (thay /dev/cu.usbmodem* bằng port COM của bạn)
 idf.py -p /dev/cu.usbmodem* flash
 
-# Xem serial monitor (trạng thái LED ON/OFF)
+# Xem serial monitor (giá crypto)
 ./run_monitor.sh
 ```
+
+## WiFi credentials (.env)
+
+Thông tin WiFi lưu trong `.env` (không commit lên git):
+
+```env
+WIFI_SSID=your_wifi_name
+WIFI_PASSWORD=your_wifi_password
+```
+
+- Copy `.env.example` thành `.env` rồi điền SSID và mật khẩu
+- Mỗi lần build, `main/wifi_config.h` được tạo từ `.env`
+- Trong code: `#include "wifi_config.h"` rồi dùng `WIFI_SSID` và `WIFI_PASSWORD`
 
 ## Cấu trúc dự án
 
 ```
 esp32c3/
+├── .env                 # WiFi credentials (gitignore)
+├── .env.example         # Mẫu
 ├── CMakeLists.txt
-├── sdkconfig.defaults
+├── scripts/
+│   └── gen_wifi_config.py
 ├── main/
-│   ├── CMakeLists.txt
-│   └── blink_main.cpp
+│   ├── blink_main.cpp
+│   └── wifi_config.h   # Auto-generated từ .env
 └── README.md
 ```

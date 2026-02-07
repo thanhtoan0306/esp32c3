@@ -1,0 +1,7 @@
+# Build
+build/
+sdkconfig
+
+# Credentials - không commit mật khẩu
+.env
+main/wifi_config.h
