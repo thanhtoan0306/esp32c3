@@ -1,8 +1,8 @@
 /**
- * ESP32-C3 Supermini - WiFi + Nhiet do HCM City
+ * ESP32-C3 Supermini - WiFi + Nhiet do cac thanh pho
  * - Ket noi WiFi
- * - Lay nhiet do HCM qua Open-Meteo API
- * - Hien thi qua Serial
+ * - Lay nhiet do HCM qua Open-Meteo API (tu dong 30s)
+ * - Nhan Enter: lay nhiet do 8 thanh pho lon, ghi log vao /spiffs/temp_log.txt
  */
 
 #include <stdio.h>
@@ -25,6 +25,7 @@
 
 #define LED_GPIO       GPIO_NUM_8
 #define LOG_PATH       "/spiffs/wifi_log.txt"
+#define TEMP_LOG_PATH  "/spiffs/temp_log.txt"
 #define WIFI_CONNECTED BIT0
 #define WIFI_FAILED    BIT1
 #define WIFI_TIMEOUT_MS 20000  // 20s timeout
@@ -75,6 +76,20 @@ static const char* wifi_reason_str(uint8_t r) {
 #define HCM_LAT "10.8231"
 #define HCM_LON "106.6297"
 
+// Cac thanh pho lon tren the gioi
+typedef struct { const char *name; const char *lat; const char *lon; } city_t;
+static const city_t CITIES[] = {
+    {"HCM City",   "10.8231",  "106.6297"},
+    {"Tokyo",      "35.6762",  "139.6503"},
+    {"London",     "51.5074",  "-0.1278"},
+    {"New York",   "40.7128",  "-74.0060"},
+    {"Paris",      "48.8566",  "2.3522"},
+    {"Sydney",     "-33.8688", "151.2093"},
+    {"Dubai",      "25.2048",  "55.2708"},
+    {"Singapore",  "1.3521",   "103.8198"},
+};
+#define NUM_CITIES (sizeof(CITIES) / sizeof(CITIES[0]))
+
 static esp_err_t http_event_handler(esp_http_client_event_t *evt)
 {
     static int offset = 0;
@@ -103,12 +118,12 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-static float fetch_hcm_temperature(void)
+static float fetch_temp(const char *lat, const char *lon)
 {
     char url[200];
     snprintf(url, sizeof(url),
         "https://api.open-meteo.com/v1/forecast?latitude=%s&longitude=%s&current=temperature_2m",
-        HCM_LAT, HCM_LON);
+        lat, lon);
 
     char response[HTTP_BUF] = {0};
 
@@ -139,6 +154,54 @@ static float fetch_hcm_temperature(void)
 
     esp_http_client_cleanup(client);
     return temp;
+}
+
+static float fetch_hcm_temperature(void) { return fetch_temp(HCM_LAT, HCM_LON); }
+
+static void fetch_and_log_all_cities(void)
+{
+    printf("\n=== Nhiet do cac thanh pho lon ===\n");
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = "storage",
+        .max_files = 2,
+        .format_if_mount_failed = true
+    };
+    if (esp_vfs_spiffs_register(&conf) != ESP_OK) {
+        printf("[Log] Loi mount SPIFFS\n");
+        return;
+    }
+
+    FILE *flog = fopen(TEMP_LOG_PATH, "a");
+    if (!flog) {
+        esp_vfs_spiffs_unregister("storage");
+        return;
+    }
+
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    struct tm t;
+    time_t now = tv.tv_sec;
+    localtime_r(&now, &t);
+    fprintf(flog, "\n--- [%04d-%02d-%02d %02d:%02d:%02d] ---\n",
+            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+            t.tm_hour, t.tm_min, t.tm_sec);
+
+    for (int i = 0; i < (int)NUM_CITIES; i++) {
+        float temp = fetch_temp(CITIES[i].lat, CITIES[i].lon);
+        if (temp > -900.0f) {
+            printf("  %-12s: %6.1f C\n", CITIES[i].name, temp);
+            fprintf(flog, "%s: %.1f C\n", CITIES[i].name, temp);
+        } else {
+            printf("  %-12s: ---\n", CITIES[i].name);
+            fprintf(flog, "%s: (loi)\n", CITIES[i].name);
+        }
+        vTaskDelay(pdMS_TO_TICKS(300));  // Tranh flood API
+    }
+
+    fclose(flog);
+    esp_vfs_spiffs_unregister("storage");
+    printf("[Log] Da ghi vao %s\n", TEMP_LOG_PATH);
 }
 
 static void wifi_scan_first(void)
@@ -261,6 +324,18 @@ static void blink_task(void *arg)
     }
 }
 
+static void serial_task(void *arg)
+{
+    char buf[64];
+    printf("\nNhan Enter de lay nhiet do cac thanh pho lon...\n");
+    while (1) {
+        if (fgets(buf, sizeof(buf), stdin) != NULL) {
+            fetch_and_log_all_cities();
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
 static void print_wifi_log_if_exists(void)
 {
     esp_vfs_spiffs_conf_t conf = {
@@ -284,7 +359,7 @@ static void print_wifi_log_if_exists(void)
 
 extern "C" void app_main(void)
 {
-    printf("\n===== ESP32-C3 - Nhiet do HCM City =====\n");
+    printf("\n===== ESP32-C3 - Nhiet do cac thanh pho =====\n");
 
     ESP_ERROR_CHECK(nvs_flash_init());
     print_wifi_log_if_exists();
@@ -292,4 +367,5 @@ extern "C" void app_main(void)
 
     xTaskCreate(blink_task, "blink", 2048, NULL, 1, NULL);
     xTaskCreate(weather_task, "weather", 4096, NULL, 2, NULL);
+    xTaskCreate(serial_task, "serial", 8192, NULL, 1, NULL);
 }
