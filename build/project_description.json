@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "blink",
-    "project_version":    "444076a-dirty",
+    "project_version":    "2fe60f6-dirty",
     "project_path":       "/Users/duongthanhtoan/Desktop/codespace/esp32c3",
     "idf_path":           "/Users/duongthanhtoan/.espressif/v5.5.2/esp-idf",
     "build_dir":          "/Users/duongthanhtoan/Desktop/codespace/esp32c3/build",

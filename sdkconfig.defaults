@@ -1,1 +1,4 @@
 CONFIG_IDF_TARGET="esp32c3"
+
+# USB Serial JTAG - cho ESP32-C3 ket noi USB: nhap duoc tu terminal
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y

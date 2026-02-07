@@ -19,6 +19,8 @@ Dự án C++ blink LED tích hợp trên bo ESP32-C3 Supermini (OLED board).
 
 Build → nạp code → mở Serial Monitor. Thoát monitor: **Ctrl+]**
 
+Trong Serial Monitor: gõ text + Enter → ESP32 hiển thị `Rep: <text>`
+
 ---
 
 ## Cách build và flash (từng bước)
