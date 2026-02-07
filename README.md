@@ -1,6 +1,8 @@
-# ESP32-C3 Supermini - Blink Built-in LED
+# ESP32-C3 Supermini - WiFi + Nhiet do HCM City
 
-Dự án C++ blink LED tích hợp trên bo ESP32-C3 Supermini (OLED board).
+- Ket noi WiFi
+- Lay nhiet do HCM qua Open-Meteo API
+- Hien thi qua Serial (cap nhat moi 30s)
 
 ## Phần cứng
 
@@ -19,7 +21,7 @@ Dự án C++ blink LED tích hợp trên bo ESP32-C3 Supermini (OLED board).
 
 Build → nạp code → mở Serial Monitor. Thoát monitor: **Ctrl+]**
 
-Trong Serial Monitor: gõ text + Enter → ESP32 hiển thị `Rep: <text>`
+Output: Nhiet do HCM City hien thi moi 30 giay.
 
 ---
 
@@ -30,14 +32,22 @@ Trong Serial Monitor: gõ text + Enter → ESP32 hiển thị `Rep: <text>`
 ./run_monitor.sh          # Mở Serial Monitor
 ```
 
+## WiFi (.env)
+
+Sua `main/wifi_config.h` hoac tao tu `.env`:
+
+```env
+WIFI_SSID=your_wifi
+WIFI_PASSWORD=your_password
+```
+
 ## Cấu trúc dự án
 
 ```
 esp32c3/
-├── CMakeLists.txt
-├── sdkconfig.defaults
+├── .env                 # WiFi credentials
 ├── main/
-│   ├── CMakeLists.txt
-│   └── blink_main.cpp
+│   ├── blink_main.cpp
+│   └── wifi_config.h
 └── README.md
 ```
