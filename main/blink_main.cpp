@@ -2,11 +2,13 @@
  * ESP32-C3 Supermini - WiFi + Nhiet do cac thanh pho
  * - Ket noi WiFi
  * - Lay nhiet do HCM qua Open-Meteo API (tu dong 30s)
- * - Nhan Enter: lay nhiet do 8 thanh pho lon, ghi log vao /spiffs/temp_log.txt
+ * - Nhap ten thanh pho + Enter: tra cuu nhiet do (text hien thi khi nhap)
  */
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
+#include <ctype.h>
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -25,7 +27,6 @@
 
 #define LED_GPIO       GPIO_NUM_8
 #define LOG_PATH       "/spiffs/wifi_log.txt"
-#define TEMP_LOG_PATH  "/spiffs/temp_log.txt"
 #define WIFI_CONNECTED BIT0
 #define WIFI_FAILED    BIT1
 #define WIFI_TIMEOUT_MS 20000  // 20s timeout
@@ -158,52 +159,6 @@ static float fetch_temp(const char *lat, const char *lon)
 
 static float fetch_hcm_temperature(void) { return fetch_temp(HCM_LAT, HCM_LON); }
 
-static void fetch_and_log_all_cities(void)
-{
-    printf("\n=== Nhiet do cac thanh pho lon ===\n");
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = "/spiffs",
-        .partition_label = "storage",
-        .max_files = 2,
-        .format_if_mount_failed = true
-    };
-    if (esp_vfs_spiffs_register(&conf) != ESP_OK) {
-        printf("[Log] Loi mount SPIFFS\n");
-        return;
-    }
-
-    FILE *flog = fopen(TEMP_LOG_PATH, "a");
-    if (!flog) {
-        esp_vfs_spiffs_unregister("storage");
-        return;
-    }
-
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    struct tm t;
-    time_t now = tv.tv_sec;
-    localtime_r(&now, &t);
-    fprintf(flog, "\n--- [%04d-%02d-%02d %02d:%02d:%02d] ---\n",
-            t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
-            t.tm_hour, t.tm_min, t.tm_sec);
-
-    for (int i = 0; i < (int)NUM_CITIES; i++) {
-        float temp = fetch_temp(CITIES[i].lat, CITIES[i].lon);
-        if (temp > -900.0f) {
-            printf("  %-12s: %6.1f C\n", CITIES[i].name, temp);
-            fprintf(flog, "%s: %.1f C\n", CITIES[i].name, temp);
-        } else {
-            printf("  %-12s: ---\n", CITIES[i].name);
-            fprintf(flog, "%s: (loi)\n", CITIES[i].name);
-        }
-        vTaskDelay(pdMS_TO_TICKS(300));  // Tranh flood API
-    }
-
-    fclose(flog);
-    esp_vfs_spiffs_unregister("storage");
-    printf("[Log] Da ghi vao %s\n", TEMP_LOG_PATH);
-}
-
 static void wifi_scan_first(void)
 {
     wifi_scan_config_t scan_ref = {0};
@@ -324,15 +279,91 @@ static void blink_task(void *arg)
     }
 }
 
+// Tim thanh pho theo ten (khong phan biet hoa thuong). Ho tro alias: HCM, NY, SG
+static const city_t* find_city(const char *name)
+{
+    if (!name || !*name) return NULL;
+    for (int i = 0; i < (int)NUM_CITIES; i++) {
+        if (strcasecmp(name, CITIES[i].name) == 0) return &CITIES[i];
+    }
+    if (strcasecmp(name, "HCM") == 0) return &CITIES[0];
+    if (strcasecmp(name, "NY") == 0) return &CITIES[3];
+    if (strcasecmp(name, "SG") == 0) return &CITIES[7];  // Singapore
+    return NULL;
+}
+
+// Trim khoang trang dau/cuoi
+static void trim(char *s)
+{
+    char *p = s;
+    while (*p && isspace((unsigned char)*p)) p++;
+    char *end = p + strlen(p);
+    while (end > p && isspace((unsigned char)end[-1])) end--;
+    *end = '\0';
+    if (p != s) memmove(s, p, strlen(p) + 1);
+}
+
 static void serial_task(void *arg)
 {
     char buf[64];
-    printf("\nNhan Enter de lay nhiet do cac thanh pho lon...\n");
+    int len = 0;
+    buf[0] = '\0';
+
+    printf("\nNhap ten thanh pho (<Enter> de tra cuu): ");
+    printf("Danh sach: HCM City, Tokyo, London, New York, Paris, Sydney, Dubai, Singapore\n\n");
+
     while (1) {
-        if (fgets(buf, sizeof(buf), stdin) != NULL) {
-            fetch_and_log_all_cities();
+        int c = getchar();
+        if (c == EOF || c < 0) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
+
+        if (c == '\n' || c == '\r') {
+            putchar('\n');
+            if (len > 0) {
+                buf[len] = '\0';
+                trim(buf);
+
+                if (len > 0) {
+                    const city_t *city = find_city(buf);
+                    if (city) {
+                        printf("  %s: ", city->name);
+                        fflush(stdout);
+                        float temp = fetch_temp(city->lat, city->lon);
+                        if (temp > -900.0f) {
+                            printf("%.1f C\n", temp);
+                        } else {
+                            printf("Loi lay du lieu\n");
+                        }
+                    } else {
+                        printf("  Khong tim thay '%s'. Danh sach: HCM City, Tokyo, London, New York, Paris, Sydney, Dubai, Singapore\n", buf);
+                    }
+                }
+            }
+            len = 0;
+            buf[0] = '\0';
+            printf("\nNhap ten thanh pho: ");
+            fflush(stdout);
+            continue;
+        }
+
+        if (c == 8 || c == 127) {  // Backspace
+            if (len > 0) {
+                len--;
+                buf[len] = '\0';
+                printf("\b \b");  // Xoa ky tu tren man hinh
+                fflush(stdout);
+            }
+            continue;
+        }
+
+        if (len < (int)sizeof(buf) - 1 && (isalnum((unsigned char)c) || c == ' ' || c == '-')) {
+            buf[len++] = (char)c;
+            buf[len] = '\0';
+            putchar(c);  // Hien thi ky tu dang nhap
+            fflush(stdout);
+        }
     }
 }
 
